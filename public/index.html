@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ur" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web Contact Extractor Pro</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background: #0f172a; color: #f8fafc; padding: 16px; }
+    .container { max-width: 720px; margin: 0 auto; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 18px; margin-bottom: 16px; }
+    h1 { font-size: 1.35rem; margin-bottom: 6px; color: #38bdf8; }
+    p.sub { font-size: 0.9rem; color: #94a3b8; margin-bottom: 14px; }
+    .input-group { display: flex; flex-direction: column; gap: 10px; }
+    input[type="text"] { width: 100%; padding: 14px; border-radius: 10px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 1rem; direction: ltr; text-align: left; }
+    button.scan-btn { width: 100%; padding: 14px; border: none; border-radius: 10px; background: #2563eb; color: #fff; font-size: 1rem; font-weight: 700; cursor: pointer; }
+    button.scan-btn:disabled { opacity: 0.6; }
+    .status { margin-top: 12px; font-size: 0.9rem; color: #fbbf24; }
+    .error { color: #f87171; margin-top: 10px; font-weight: 600; }
+    .country-box { background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+    .country-title { font-size: 1rem; font-weight: 700; color: #38bdf8; margin-bottom: 10px; border-bottom: 1px solid #1e293b; padding-bottom: 6px; }
+    .email-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid #1e293b; }
+    .email-row:last-child { border-bottom: none; }
+    .email-text { font-size: 0.95rem; font-weight: 600; color: #f8fafc; word-break: break-all; direction: ltr; text-align: left; }
+    .copy-btn { background: #16a34a; color: #fff; border: none; border-radius: 8px; padding: 8px 14px; font-size: 0.85rem; font-weight: 700; cursor: pointer; flex-shrink: 0; }
+    .copy-btn.copied { background: #0284c7; }
+    .names-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .name-chip { background: #0f172a; border: 1px solid #334155; padding: 7px 12px; border-radius: 99px; font-size: 0.88rem; direction: ltr; }
+    .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #16a34a; color: #fff; padding: 10px 20px; border-radius: 99px; font-size: 0.9rem; font-weight: 700; display: none; z-index: 99; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Web Contact Extractor Pro</h1>
+      <p class="sub">کسی بھی ویب سائٹ کا لنک ڈالیں — یہ ای میلز، نام اور ملک علیحدہ کر دے گا۔</p>
+      <div class="input-group">
+        <input type="text" id="urlInput" placeholder="https://example.com">
+        <button class="scan-btn" id="scanBtn" onclick="startScan()">ویب سائٹ اسکین کریں</button>
+      </div>
+      <div class="status" id="statusBox"></div>
+      <div class="error" id="errorBox"></div>
+    </div>
+
+    <div class="card" id="emailsCard" style="display:none;">
+      <h2 style="font-size:1.1rem; margin-bottom:12px;">ملک کے حساب سے ای میلز</h2>
+      <div id="countryGroups"></div>
+    </div>
+
+    <div class="card" id="namesCard" style="display:none;">
+      <h2 style="font-size:1.1rem; margin-bottom:8px;">ملنے والے نام</h2>
+      <div class="names-list" id="namesBox"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">کاپی ہو گیا!</div>
+
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.display = 'block';
+      setTimeout(() => { t.style.display = 'none'; }, 1800);
+    }
+
+    function copyEmail(email, btnEl) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(email).catch(() => fallbackCopy(email));
+      } else {
+        fallbackCopy(email);
+      }
+      btnEl.textContent = 'Copied ✓';
+      btnEl.classList.add('copied');
+      showToast('کاپی ہو گیا: ' + email);
+      setTimeout(() => {
+        btnEl.textContent = 'Copy';
+        btnEl.classList.remove('copied');
+      }, 1500);
+    }
+
+    function fallbackCopy(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+
+    async function startScan() {
+      const url = document.getElementById('urlInput').value.trim();
+      const statusBox = document.getElementById('statusBox');
+      const errorBox = document.getElementById('errorBox');
+      const scanBtn = document.getElementById('scanBtn');
+
+      errorBox.textContent = '';
+      if (!url) {
+        errorBox.textContent = 'براہِ کرم ویب سائٹ کا لنک لکھیں۔';
+        return;
+      }
+
+      scanBtn.disabled = true;
+      scanBtn.textContent = 'اسکین ہو رہا ہے...';
+      statusBox.textContent = 'ویب سائٹ کے صفحات چیک کیے جا رہے ہیں، تھوڑا انتظار کریں...';
+      document.getElementById('emailsCard').style.display = 'none';
+      document.getElementById('namesCard').style.display = 'none';
+
+      try {
+        const res = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          errorBox.textContent = data.error || 'اسکین مکمل نہیں ہو سکا۔';
+          statusBox.textContent = '';
+          return;
+        }
+
+        statusBox.textContent = `مکمل: ${data.pagesScanned} صفحات اسکین ہوئے | ${data.emails.length} ای میلز ملیں | ملک: ${data.detectedCountry}`;
+
+        const groupsDiv = document.getElementById('countryGroups');
+        groupsDiv.innerHTML = '';
+        const countries = Object.keys(data.groupedByCountry || {});
+
+        if (countries.length > 0) {
+          document.getElementById('emailsCard').style.display = 'block';
+          countries.forEach((country) => {
+            const list = data.groupedByCountry[country];
+            const box = document.createElement('div');
+            box.className = 'country-box';
+
+            const title = document.createElement('div');
+            title.className = 'country-title';
+            title.textContent = `${country} (${list.length})`;
+            box.appendChild(title);
+
+            list.forEach((item) => {
+              const row = document.createElement('div');
+              row.className = 'email-row';
+
+              const span = document.createElement('span');
+              span.className = 'email-text';
+              span.textContent = item.email;
+
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'copy-btn';
+              btn.textContent = 'Copy';
+              btn.onclick = () => copyEmail(item.email, btn);
+
+              row.appendChild(span);
+              row.appendChild(btn);
+              box.appendChild(row);
+            });
+
+            groupsDiv.appendChild(box);
+          });
+        } else {
+          statusBox.textContent += ' — اس ویب سائٹ کے اسکین شدہ صفحات پر ظاہری ای میل نہیں ملی۔';
+        }
+
+        const namesBox = document.getElementById('namesBox');
+        namesBox.innerHTML = '';
+        if (data.names && data.names.length > 0) {
+          document.getElementById('namesCard').style.display = 'block';
+          data.names.forEach((name) => {
+            const chip = document.createElement('span');
+            chip.className = 'name-chip';
+            chip.textContent = name;
+            namesBox.appendChild(chip);
+          });
+        }
+      } catch {
+        errorBox.textContent = 'نیٹ ورک یا سرور میں مسئلہ پیش آیا۔';
+        statusBox.textContent = '';
+      } finally {
+        scanBtn.disabled = false;
+        scanBtn.textContent = 'ویب سائٹ اسکین کریں';
+      }
+    }
+  </script>
+</body>
+  </html>
+  
